@@ -1,15 +1,13 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,15 +20,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build plugin
+      - name: Build
         run: npm run build
 
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title "$tag" \
-            --notes "" \
+          version=$(node -p "require('./manifest.json').version")
+          gh release create "$version" \
+            --title "$version" \
+            --generate-notes \
             main.js manifest.json
