@@ -164,6 +164,26 @@ const CSS = `
 	opacity: 0.85;
 }
 
+.grocery-empty-state {
+	padding: 16px 0 8px;
+	text-align: center;
+	color: var(--text-muted);
+	font-size: 13px;
+}
+
+.grocery-item-count {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+}
+
+.grocery-duplicate-warning {
+	font-size: 12px;
+	color: #e05252;
+	margin-top: -6px;
+	margin-bottom: 6px;
+}
+
 .grocery-quick-add {
 	margin-top: 12px;
 	padding-top: 10px;
@@ -328,7 +348,8 @@ export default class GroceryListPlugin extends Plugin {
 		container.empty();
 		const wrapper = container.createDiv({ cls: 'grocery-plugin' });
 
-		const input = this.buildInputRow(wrapper, listId, container);
+		const { input, warningEl } = this.buildInputRow(wrapper, listId, container);
+		this.buildItemCount(wrapper, listId);
 		this.buildActiveList(wrapper, listId, container);
 		const pills = this.buildQuickAdd(wrapper, listId, container);
 		this.buildFooter(wrapper, listId, container);
@@ -341,24 +362,49 @@ export default class GroceryListPlugin extends Plugin {
 					const match = !query || pill.textContent?.toLowerCase().includes(query);
 					pill.style.display = match ? '' : 'none';
 				});
+
+				// Clear duplicate warning when input changes
+				warningEl.textContent = '';
 			});
 		}
+	}
+
+	private buildItemCount(wrapper: HTMLElement, listId: string) {
+		const items = this.data.lists[listId] ?? [];
+		if (items.length === 0) return;
+
+		const total = items.length;
+		const checked = items.filter((i) => i.checked).length;
+		const label = checked > 0 ? `${total} item${total !== 1 ? 's' : ''} · ${checked} checked` : `${total} item${total !== 1 ? 's' : ''}`;
+		wrapper.createDiv({ cls: 'grocery-item-count', text: label });
 	}
 
 	private buildInputRow(
 		wrapper: HTMLElement,
 		listId: string,
 		container: HTMLElement
-	): HTMLInputElement {
+	): { input: HTMLInputElement; warningEl: HTMLElement } {
 		const row = wrapper.createDiv({ cls: 'grocery-input-row' });
 		const input = row.createEl('input', {
 			attr: { type: 'text', placeholder: 'Add item…' },
 		});
 		const btn = row.createEl('button', { cls: 'grocery-add-btn', text: 'Add' });
+		const warningEl = wrapper.createDiv({ cls: 'grocery-duplicate-warning' });
 
 		const addItem = async () => {
 			const name = input.value.trim();
 			if (!name) return;
+
+			// Duplicate protection — check if item already exists in the active list
+			const isDuplicate = (this.data.lists[listId] ?? []).some(
+				(i) => i.name.toLowerCase() === name.toLowerCase()
+			);
+			if (isDuplicate) {
+				warningEl.textContent = `"${name}" is already in your list.`;
+				return;
+			}
+
+			warningEl.textContent = '';
 			this.data.lists[listId].push({ name, checked: false });
 			if (!this.data.library.includes(name)) {
 				this.data.library.push(name);
@@ -373,7 +419,7 @@ export default class GroceryListPlugin extends Plugin {
 			if (e.key === 'Enter') addItem();
 		});
 
-		return input;
+		return { input, warningEl };
 	}
 
 	private buildActiveList(
@@ -382,6 +428,14 @@ export default class GroceryListPlugin extends Plugin {
 		container: HTMLElement
 	) {
 		const items = this.data.lists[listId] ?? [];
+
+		if (items.length === 0) {
+			wrapper.createDiv({
+				cls: 'grocery-empty-state',
+				text: 'No items yet — add something above.',
+			});
+			return;
+		}
 
 		for (let index = 0; index < items.length; index++) {
 			const item = items[index];
